@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68,<69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smash"
+version = "0.1.0"
+dependencies = [
+  "torch>=2.6.0,<2.7.0",          # now matches BenchSTPP
+]
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -64,7 +64,6 @@ def pad_time(insts):
 
 def collate_fn(insts):
     """ Collate function, as required by PyTorch. """
-
     time, time_norm, lng, lat = list(zip(*insts))
     time = pad_time(time)
     time_norm = pad_time(time_norm)

@@ -4,15 +4,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import model.Constants as Constants
-from model.Layers import EncoderLayer
+from .Constants import PAD
+from .Layers import EncoderLayer
 
 
 def get_non_pad_mask(seq):
     """ Get the non-padding positions. """
-
+    print(f"[DEBUG upstream get_non_pad_mask] seq.dim() = {seq.dim()}")
     assert seq.dim() == 2
-    return seq.ne(Constants.PAD).type(torch.float).unsqueeze(-1)
+    return seq.ne(PAD).type(torch.float).unsqueeze(-1)
 
 
 def get_attn_key_pad_mask(seq_k, seq_q):
@@ -20,7 +20,7 @@ def get_attn_key_pad_mask(seq_k, seq_q):
 
     # expand to fit the shape of key query attention matrix
     len_q = seq_q.size(1)
-    padding_mask = seq_k.eq(Constants.PAD)
+    padding_mask = seq_k.eq(PAD)
     padding_mask = padding_mask.unsqueeze(1).expand(-1, len_q, -1, -1)  # b x lq x lk
     return padding_mask
 
@@ -41,7 +41,7 @@ class Encoder(nn.Module):
 
     def __init__(
             self, d_model, d_inner,
-            n_layers, n_head, d_k, d_v, dropout,device, loc_dim, num_types):
+            n_layers, n_head, d_k, d_v, dropout, loc_dim, num_types):
         super().__init__()
 
         self.d_model = d_model
@@ -50,7 +50,9 @@ class Encoder(nn.Module):
         # position vector, used for temporal encoding
         self.position_vec = torch.tensor(
             [math.pow(10000.0, 2.0 * (i // 2) / d_model) for i in range(d_model)],
-            device=device)
+            #device=device,
+            dtype=torch.float32
+            )
         
         if loc_dim == 3:
             self.event_mark_emb = nn.Embedding(num_types + 1, d_model, padding_idx=0)
@@ -119,7 +121,7 @@ class Encoder_ST(nn.Module):
 
     def __init__(
             self, d_model, d_inner,
-            n_layers, n_head, d_k, d_v, dropout,device, loc_dim,CosSin = False, num_types=1):
+            n_layers, n_head, d_k, d_v, dropout, loc_dim, CosSin = False, num_types=1):
         super().__init__()
 
         self.d_model = d_model
@@ -128,7 +130,8 @@ class Encoder_ST(nn.Module):
         # position vector, used for temporal encoding
         self.position_vec = torch.tensor(
             [math.pow(10000.0, 2.0 * (i // 2) / d_model) for i in range(d_model)],
-            device=device)
+            #device=device
+            dtype=torch.float32)
 
         # event loc embedding
         self.event_emb_temporal = nn.Sequential(
@@ -295,7 +298,7 @@ class Transformer(nn.Module):
                event_time: batch*seq_len.
         Output: enc_output: batch*seq_len*model_dim
         """
-
+        
         non_pad_mask = get_non_pad_mask(event_time)
         
         enc_output = self.encoder(event_loc, event_time, non_pad_mask)
@@ -308,7 +311,7 @@ class Transformer_ST(nn.Module):
 
     def __init__(
             self, d_model=256, d_rnn=128, d_inner=1024,
-            n_layers=4, n_head=4, d_k=64, d_v=64, dropout=0.1,device=None,loc_dim=2,CosSin=False,num_types=1):
+            n_layers=4, n_head=4, d_k=64, d_v=64, dropout=0.1,loc_dim=2,CosSin=False,num_types=1):
         super().__init__()
 
         self.encoder = Encoder_ST(
@@ -319,7 +322,6 @@ class Transformer_ST(nn.Module):
             d_k=d_k,
             d_v=d_v,
             dropout=dropout,
-            device=device,
             loc_dim = loc_dim,
             CosSin = CosSin,
             num_types=num_types

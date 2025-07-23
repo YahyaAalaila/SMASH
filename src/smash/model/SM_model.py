@@ -208,15 +208,13 @@ class ScoreMatch_module(nn.Module):
         return pred
 
     def get_score(self, x, cond = None, sample=True):
-        t = torch.autograd.Variable(x[:,:,:1], requires_grad=True)
-
+        #t = torch.autograd.Variable(x[:,:,:1], requires_grad=True)
+        t = x[:, :, :1].requires_grad_()
         intensity = self.get_intensity(t, cond)
         intensity_log = (intensity+1e-10).log()
-
         intensity_grad_t = torch.autograd.grad(intensity_log.sum(), t, retain_graph=True, create_graph=sample)[0]
         score_t = intensity_grad_t - intensity
         score_loc = self.get_score_loc(x, cond)
-
         return torch.cat((score_t,score_loc),-1)
 
     def get_score_mark(self, x, mark, cond = None, sample=True):
@@ -264,12 +262,18 @@ class SMASH(nn.Module):
         self.is_marked = num_types > 1
         self.num_types = num_types
         self.loss_lambda = loss_lambda
-        self.loss_lambda2 = torch.tensor([1.,loss_lambda2, loss_lambda2]).cuda()
+        self.device = next(self.parameters()).device  # grabs whatever device your module is on
+        self.loss_lambda2 = torch.tensor([1., loss_lambda, loss_lambda2], device=self.device)
+        #self.loss_lambda2 = torch.tensor([1.,loss_lambda2, loss_lambda2]).cuda()
         self.smooth = smooth
 
         self.seq_length = seq_length
         self.sampling_timesteps = sampling_timesteps
-        self.sigma = torch.tensor([sigma[0],sigma[1],sigma[1]]).cuda()
+        #self.sigma = torch.tensor([sigma[0],sigma[1],sigma[1]], device=self.device)
+        self.register_buffer(
+            "sigma",
+            torch.tensor([sigma[0], sigma[1], sigma[1]], dtype=torch.float32)
+        )
         self.langevin_step = langevin_step
         self.n_samples = n_samples
         self.sampling_method = sampling_method
@@ -315,6 +319,7 @@ class SMASH(nn.Module):
             
             else:
                 x = 0.5*torch.randn([*shape], device=cond.device)
+                
                 mark = torch.multinomial(torch.ones(self.num_types).cuda(),batch_size*n_samples, replacement=True).reshape(batch_size,n_samples).cuda() # batch*len-1*num_samples  
     
 # torch.ones(self.num_types).cuda()
@@ -354,6 +359,7 @@ class SMASH(nn.Module):
         noise = default(noise, lambda: torch.randn_like(x_start.repeat(1,self.num_noise,1)))
 
         # noise sample
+
         x = x_start + self.sigma * noise
 
         score = self.model.get_score(x, cond)
@@ -364,8 +370,9 @@ class SMASH(nn.Module):
     
     def p_losses_mark(self, x_start, noise = None, cond=None):
         x_mark = x_start[:,:,1]
-        x_start = torch.cat((x_start[:,:,:1], x_start[:,:,2:]),-1)
-        noise = default(noise, lambda: torch.randn_like(x_start.repeat(1,self.num_noise,1)))
+        x_start = torch.cat((x_start[:, :, :1], x_start[:, :, 2:]), -1)
+        noise = default(noise, lambda: torch.randn_like(x_start.repeat(1, self.num_noise, 1), device=x_start.device))
+
 
         # noise sample
         x = x_start + self.sigma * noise
@@ -398,6 +405,7 @@ class SMASH(nn.Module):
 
     def forward(self, img, cond, *args, **kwargs):
         b, c, n, device, seq_length, = *img.shape, img.device, self.seq_length
+        print(f"[DEBUG ▶︎ SMASH] img.shape = {img.shape}, cond.shape = {getattr(cond, 'shape', cond)}")
         assert n == seq_length, f'seq length must be {seq_length}'
         img = normalize_to_neg_one_to_one(img)
         

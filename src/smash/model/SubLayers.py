@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import model.Constants as Constants
-from model.Modules import ScaledDotProductAttention
+#import model.Constants as Constants
+from .Modules import ScaledDotProductAttention
 
 
 class MultiHeadAttention(nn.Module):
